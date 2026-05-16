@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ru" class="aihub-booting">
+<head>
+  <meta charset="UTF-8">
+  <meta name="theme-color" content="#05070a">
+  <meta name="color-scheme" content="dark">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Hub</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+  <link rel="dns-prefetch" href="https://chatgpt.com">
+  <link rel="dns-prefetch" href="https://gemini.google.com">
+  <link rel="dns-prefetch" href="https://claude.ai">
+  <link rel="dns-prefetch" href="https://www.perplexity.ai">
+  <link rel="dns-prefetch" href="https://grok.com">
+  <link rel="dns-prefetch" href="https://chat.qwen.ai">
+  <link rel="dns-prefetch" href="https://chat.deepseek.com">
+  <link rel="dns-prefetch" href="https://copilot.microsoft.com">
+  <link rel="dns-prefetch" href="https://chat.mistral.ai">
+  <link rel="dns-prefetch" href="https://youtube.com">
+
+  <script src="newtab-preload.js"></script>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+  <svg class="svg-filters" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="aihub-star-bloom" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+        <feColorMatrix in="SourceGraphic" type="matrix" values="
+          1 0 0 0 0
+          0 1 0 0 0
+          0 0 1 0 0
+          0.30 0.59 0.11 0 -0.58" result="brightMask"/>
+        <feGaussianBlur id="aihub-star-bloom-blur" in="brightMask" stdDeviation="1.95" result="softBloom"/>
+        <feColorMatrix id="aihub-star-bloom-lift" in="softBloom" type="matrix" values="
+          1.16 0 0 0 0
+          0 1.10 0 0 0
+          0 0 1.30 0 0
+          0 0 0 0.52 0" result="bloom"/>
+        <feMerge>
+          <feMergeNode in="SourceGraphic"/>
+          <feMergeNode in="bloom"/>
+        </feMerge>
+      </filter>
+    </defs>
+  </svg>
+  <canvas id="bg-canvas"></canvas>
+  <canvas id="real-sky-canvas"></canvas>
+  <canvas id="webgpu-stars-canvas"></canvas>
+  <canvas id="bloom-canvas"></canvas>
+  <div id="bg-dim"></div>
+  <div id="aurora"></div>
+  <div id="spotlight"></div>
+
+  <main class="container">
+    <div class="clock-wrap">
+      <div class="greeting" id="greeting"></div>
+      <div class="clock-time" id="clock-time">00:00</div>
+      <div class="clock-sec-bar"><div class="clock-sec-fill" id="clock-sec-fill"></div></div>
+      <div class="clock-date" id="clock-date"></div>
+      <div class="clock-info" id="clock-info">
+        <span id="moon-phase"></span>
+        <span class="info-sep">·</span>
+        <span id="day-progress"></span>
+        <span class="info-sep" id="weather-sep">·</span>
+        <span id="weather"></span>
+      </div>
+      <div class="workday-bar hidden" id="workday-bar">
+        <div class="workday-fill" id="workday-fill"></div>
+        <span class="workday-label" id="workday-label"></span>
+      </div>
+    </div>
+
+    <div class="title-area">
+      <div class="title-rays"></div>
+      <h1 class="title" data-text="AI HUB">AI HUB</h1>
+      <p class="subtitle" id="subtitle"></p>
+    </div>
+
+    <section id="focus-panel" class="focus-panel" aria-live="polite">
+      <div class="focus-mode-tabs" role="tablist" aria-label="Pomodoro modes">
+        <button class="focus-mode active" data-focus-mode="focus">Фокус</button>
+        <button class="focus-mode" data-focus-mode="short">Перерыв</button>
+        <button class="focus-mode" data-focus-mode="long">Длинный</button>
+      </div>
+      <div class="focus-time" id="focus-time">25:00</div>
+      <div class="focus-progress"><div id="focus-progress-fill"></div></div>
+      <div class="focus-status" id="focus-status">Готов</div>
+      <div class="focus-actions">
+        <button id="focus-start-pause" class="focus-action" title="Старт / Пауза">
+          <svg id="focus-icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg id="focus-icon-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <button id="focus-reset" class="focus-action" title="Сброс">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+        </button>
+        <button id="focus-next" class="focus-action" title="Следующий режим">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M5 5l8 7-8 7V5zm9 0h3v14h-3V5z"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <div class="search-wrap" id="search-wrap">
+      <form id="search-form" class="search-form" autocomplete="off">
+        <div class="search-engine-btn" id="search-engine-btn" title="Сменить поисковик">
+          <svg class="search-engine-icon" id="search-icon-google" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          <svg class="search-engine-icon" id="search-icon-youtube" viewBox="0 0 24 24" fill="currentColor" style="display:none; color: #ff3333;">
+            <path d="M23 7s-.3-1.9-1.2-2.7c-1.1-1.2-2.4-1.2-3-1.3C16.4 3 12 3 12 3s-4.4 0-6.8.1c-.6.1-1.9.1-3 1.3C1.3 5.2 1 7 1 7S.7 9.1.7 11.2v1.6C.7 14.9 1 17 1 17s.3 1.9 1.2 2.7c1.1 1.2 2.6 1.1 3.3 1.2C7.5 21 12 21 12 21s4.4 0 6.8-.2c.6-.1 1.9-.1 3-1.3.9-.8 1.2-2.7 1.2-2.7s.3-2.1.3-4.2v-1.6C23.3 9.1 23 7 23 7zm-13 7.5v-7l7 3.5-7 3.5z"/>
+          </svg>
+          <svg class="search-engine-icon" id="search-icon-duckduckgo" viewBox="0 0 24 24" fill="none" style="display:none;">
+            <circle cx="12" cy="12" r="10" fill="#de5833"/>
+            <text x="12" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="11" fill="#fff" letter-spacing="-0.5">DDG</text>
+          </svg>
+        </div>
+        <input
+          id="search-input"
+          class="search-input"
+          type="text"
+          placeholder="Поиск в интернете..."
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <button type="button" id="search-clear" class="search-clear" aria-label="Очистить" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <button type="button" id="search-calc" class="search-calc" aria-label="Скопировать результат" style="display:none" title="Enter — скопировать">
+          <span id="search-calc-value">= 0</span>
+          <svg class="search-calc-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button type="button" id="search-btn" class="search-btn" aria-label="Найти">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+      </form>
+      <span class="search-opens" id="search-opens"></span>
+    </div>
+
+    <div class="buttons">
+      <div class="btn-group">
+        <span class="group-label">AI Tools</span>
+        <div class="btn-row" id="ai-tools-row">
+          <button id="open-chatgpt" class="button" data-ai-tool="chatgpt" data-url="https://chatgpt.com/" data-key="1" data-tooltip="Открыть ChatGPT" style="--brand-color: var(--gpt-color);">
+            <span class="kbd-hint">1</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M22.28 14.37a5.1 5.1 0 00-.44-4.22 5.17 5.17 0 00-5.58-2.47 5.1 5.1 0 00-3.83-1.7 5.17 5.17 0 00-4.95 3.63 5.1 5.1 0 00-3.41 2.47 5.17 5.17 0 00.63 6.05 5.1 5.1 0 00.44 4.22 5.17 5.17 0 005.58 2.47 5.1 5.1 0 003.83 1.7 5.17 5.17 0 004.95-3.63 5.1 5.1 0 003.41-2.47 5.17 5.17 0 00-.63-6.05zM12.56 23a3.87 3.87 0 01-2.49-.91l.12-.07 4.14-2.39a.67.67 0 00.34-.59v-5.83l1.75 1.01a.06.06 0 01.03.05v4.83A3.89 3.89 0 0112.56 23zM4.19 19.43a3.87 3.87 0 01-.46-2.6l.12.07 4.14 2.39a.68.68 0 00.68 0l5.06-2.92v2.02a.06.06 0 01-.03.05l-4.19 2.42a3.89 3.89 0 01-5.32-1.43zM3.1 10.39a3.87 3.87 0 012.03-1.7v4.92a.67.67 0 00.34.59l5.06 2.92-1.75 1.01a.06.06 0 01-.06 0l-4.19-2.42A3.89 3.89 0 013.1 10.39zm14.37 3.35l-5.06-2.92 1.75-1.01a.06.06 0 01.06 0l4.19 2.42a3.89 3.89 0 01-.6 7.02v-4.92a.67.67 0 00-.34-.59zm1.74-2.62l-.12-.07-4.14-2.39a.68.68 0 00-.68 0l-5.06 2.92V9.56a.06.06 0 01.03-.05l4.19-2.42a3.89 3.89 0 015.78 4.03zM8.26 14.74l-1.75-1.01a.06.06 0 01-.03-.05V9.85a3.89 3.89 0 016.38-2.98l-.12.07-4.14 2.39a.67.67 0 00-.34.59zm.95-2.05L12 11.39l2.25 1.3v2.6L12 16.59l-2.25-1.3z"/>
+            </svg>
+            <span class="btn-name">ChatGPT</span>
+            <span class="btn-url">chatgpt.com</span>
+          </button>
+
+          <button id="open-gemini" class="button" data-ai-tool="gemini" data-url="https://gemini.google.com/" data-key="2" data-tooltip="Открыть Gemini" style="--brand-color: var(--gemini-color);">
+            <span class="kbd-hint">2</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0c0 6.627-5.373 12-12 12 6.627 0 12 5.373 12 12 0-6.627 5.373-12 12-12-6.627 0-12-5.373-12-12z"/>
+            </svg>
+            <span class="btn-name">Gemini</span>
+            <span class="btn-url">gemini.google.com</span>
+          </button>
+
+          <button id="open-claude" class="button" data-ai-tool="claude" data-url="https://claude.ai/" data-key="3" data-tooltip="Открыть Claude" style="--brand-color: var(--claude-color);">
+            <span class="kbd-hint">3</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M15.7 2.5H8.3c-.5 0-1 .27-1.3.75L3.25 10c-.27.46-.27 1.04 0 1.5L7 18.25c.27.46.77.75 1.3.75h7.4c.5 0 1-.27 1.3-.75l3.75-6.75c.27-.46.27-1.04 0-1.5L17 3.25c-.27-.46-.77-.75-1.3-.75zM12 15a3 3 0 110-6 3 3 0 010 6z"/>
+            </svg>
+            <span class="btn-name">Claude</span>
+            <span class="btn-url">claude.ai</span>
+          </button>
+
+          <button id="open-perplexity" class="button" data-ai-tool="perplexity" data-url="https://www.perplexity.ai/" data-key="4" data-tooltip="Открыть Perplexity" style="--brand-color: var(--perplexity-color);">
+            <span class="kbd-hint">4</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v18"/>
+              <path d="M5 7.5h14v9H5z"/>
+              <path d="M5 7.5 12 3l7 4.5"/>
+              <path d="m5 16.5 7 4.5 7-4.5"/>
+              <path d="M8.5 10.2h7"/>
+              <path d="M8.5 13.8h7"/>
+            </svg>
+            <span class="btn-name">Perplexity</span>
+            <span class="btn-url">perplexity.ai</span>
+          </button>
+
+          <button id="open-grok" class="button" data-ai-tool="grok" data-url="https://grok.com/" data-key="5" data-tooltip="Открыть Grok" style="--brand-color: var(--grok-color);">
+            <span class="kbd-hint">5</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19 19 4"/>
+              <path d="M9 4h10v10"/>
+              <path d="M5 5l14 14"/>
+            </svg>
+            <span class="btn-name">Grok</span>
+            <span class="btn-url">grok.com</span>
+          </button>
+
+          <button id="open-qwen" class="button" data-ai-tool="qwen" data-url="https://chat.qwen.ai/" data-key="6" data-tooltip="Открыть Qwen" style="--brand-color: var(--qwen-color);">
+            <span class="kbd-hint">6</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="6.5"/>
+              <path d="M15.5 15.5 20 20"/>
+              <path d="M8.2 10.4c.8-1.6 2.7-2.2 4.2-1.3 1.5.9 1.9 3 .9 4.4"/>
+              <path d="M8.8 13.4h4.8"/>
+            </svg>
+            <span class="btn-name">Qwen</span>
+            <span class="btn-url">chat.qwen.ai</span>
+          </button>
+
+          <button id="open-deepseek" class="button" data-ai-tool="deepseek" data-url="https://chat.deepseek.com/" data-key="7" data-tooltip="Открыть DeepSeek" style="--brand-color: var(--deepseek-color);">
+            <span class="kbd-hint">7</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 14c3.3-6 9.7-6 13 0"/>
+              <path d="M7 17c2.2-3.4 7.8-3.4 10 0"/>
+              <path d="M12 4v4"/>
+              <path d="M5 8l3 2"/>
+              <path d="m19 8-3 2"/>
+              <circle cx="12" cy="18" r="1.8" fill="currentColor" stroke="none"/>
+            </svg>
+            <span class="btn-name">DeepSeek</span>
+            <span class="btn-url">deepseek.com</span>
+          </button>
+
+          <button id="open-copilot" class="button" data-ai-tool="copilot" data-url="https://copilot.microsoft.com/" data-key="8" data-tooltip="Открыть Copilot" style="--brand-color: var(--copilot-color);">
+            <span class="kbd-hint">8</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7.5 5.5c2.7-2.4 6.9-2.4 9.6.1 2.7 2.5 3 6.6.7 9.5"/>
+              <path d="M16.5 18.5c-2.7 2.4-6.9 2.4-9.6-.1-2.7-2.5-3-6.6-.7-9.5"/>
+              <path d="M7 9h10"/>
+              <path d="M7 15h10"/>
+            </svg>
+            <span class="btn-name">Copilot</span>
+            <span class="btn-url">copilot.microsoft.com</span>
+          </button>
+
+          <button id="open-mistral" class="button" data-ai-tool="mistral" data-url="https://chat.mistral.ai/chat" data-key="9" data-tooltip="Открыть Mistral Le Chat" style="--brand-color: var(--mistral-color);">
+            <span class="kbd-hint">9</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 5h4v4H4zM10 5h4v4h-4zM16 5h4v4h-4zM7 10h4v4H7zM13 10h4v4h-4zM4 15h4v4H4zM10 15h4v4h-4zM16 15h4v4h-4z"/>
+            </svg>
+            <span class="btn-name">Mistral</span>
+            <span class="btn-url">chat.mistral.ai</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="group-sep"></div>
+
+      <div class="btn-group">
+        <span class="group-label">Browse</span>
+        <div class="btn-row">
+          <button id="open-youtube" class="button" data-url="https://youtube.com/" data-key="0" data-tooltip="Открыть YouTube" style="--brand-color: var(--yt-color);">
+            <span class="kbd-hint">0</span>
+
+            <div class="icon-glow"></div>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23 7s-.3-1.9-1.2-2.7c-1.1-1.2-2.4-1.2-3-1.3C16.4 3 12 3 12 3s-4.4 0-6.8.1c-.6.1-1.9.1-3 1.3C1.3 5.2 1 7 1 7S.7 9.1.7 11.2v1.6C.7 14.9 1 17 1 17s.3 1.9 1.2 2.7c1.1 1.2 2.6 1.1 3.3 1.2C7.5 21 12 21 12 21s4.4 0 6.8-.2c.6-.1 1.9-.1 3-1.3.9-.8 1.2-2.7 1.2-2.7s.3-2.1.3-4.2v-1.6C23.3 9.1 23 7 23 7zm-13 7.5v-7l7 3.5-7 3.5z"/>
+            </svg>
+            <span class="btn-name">YouTube</span>
+            <span class="btn-url">youtube.com</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="byline">by FenixUzb</div>
+  <div id="focus-toast" class="focus-toast"></div>
+
+  <div id="settings-panel" class="settings-panel hidden">
+    <div class="settings-title">Настройки</div>
+    <div class="hdr-debug" id="hdr-debug" aria-live="polite"></div>
+    <label class="settings-toggle"><input type="checkbox" id="set-vignette" checked><span>Виньетка</span></label>
+    <label class="settings-toggle"><input type="checkbox" id="set-shooting" checked><span>Звездопад</span></label>
+    <div class="settings-range">
+      <label class="settings-range-label" for="set-shooting-speed">
+        <span>Скорость метеоров</span>
+        <span id="set-shooting-speed-value">100%</span>
+      </label>
+      <input type="range" id="set-shooting-speed" class="settings-range-input" min="0" max="3" step="0.1" value="1">
+    </div>
+    <label class="settings-toggle"><input type="checkbox" id="set-nebula" checked><span>Туманность</span></label>
+    <label class="settings-toggle">
+      <input type="checkbox" id="set-warp">
+      <span>Полёт сквозь звёзды</span>
+    </label>
+    <div class="settings-range">
+      <label class="settings-range-label" for="set-flight-speed">
+        <span>Скорость полёта</span>
+        <span id="set-flight-speed-value">9x</span>
+      </label>
+      <input type="range" id="set-flight-speed" class="settings-range-input" min="1" max="15" step="0.5" value="9">
+    </div>
+    <div class="settings-range">
+      <label class="settings-range-label" for="set-flight-star-count">
+        <span>Количество звёзд</span>
+        <span id="set-flight-star-count-value">520</span>
+      </label>
+      <input type="range" id="set-flight-star-count" class="settings-range-input" min="100" max="2000" step="20" value="520">
+    </div>
+    <details class="settings-advanced">
+      <summary>Детали неба</summary>
+      <label class="settings-toggle"><input type="checkbox" id="set-aurora" checked><span>Сияние</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-constellations" checked><span>Созвездия</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-dust" checked><span>Пылинки</span></label>
+    </details>
+    <details class="settings-advanced">
+      <summary>Визуальные эффекты</summary>
+      <label class="settings-toggle"><input type="checkbox" id="set-cosmic-depth" checked><span>3D глубина</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-hdr" checked><span>HDR / P3</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-bloom" checked><span>Bloom</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-planet" checked><span>Планета</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-cursor-lens" checked><span>Линза курсора</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-blackhole"><span>Чёрная дыра</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-realsky"><span>Реальное небо</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-audio-reactive"><span>Аудиореактив</span></label>
+      <div class="settings-audio">
+        <label class="settings-city-label" for="set-audio-source">Источник</label>
+        <select id="set-audio-source" class="settings-select">
+          <option value="mic">Микрофон</option>
+          <option value="system">Системный звук</option>
+        </select>
+        <div id="audio-reactive-status" class="settings-status" aria-live="polite"></div>
+      </div>
+      <label class="settings-toggle"><input type="checkbox" id="set-acrylic" checked><span>Акрил</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-refraction" checked><span>Преломление</span></label>
+    </details>
+    <details class="settings-advanced settings-tools">
+      <summary>Нейросети на экране</summary>
+      <div id="ai-tool-settings-list" class="settings-toggle-list"></div>
+      <div class="settings-mini-actions">
+        <button type="button" id="ai-tools-core">Основные</button>
+        <button type="button" id="ai-tools-all">Все</button>
+      </div>
+      <div class="settings-custom-tool">
+        <label class="settings-city-label" for="custom-tool-name">Своя ссылка</label>
+        <input type="text" id="custom-tool-name" class="settings-city-input" placeholder="Название" autocomplete="off" spellcheck="false">
+        <input type="text" id="custom-tool-url" class="settings-city-input" placeholder="https://..." autocomplete="off" spellcheck="false">
+        <button type="button" id="custom-tool-add" class="settings-add-button">Добавить</button>
+        <div id="custom-tools-list" class="custom-tools-list"></div>
+      </div>
+    </details>
+    <div class="settings-divider"></div>
+    <div class="settings-range">
+      <label class="settings-range-label" for="set-star-glow">
+        <span>Свечение</span>
+        <span id="set-star-glow-value">170%</span>
+      </label>
+      <input type="range" id="set-star-glow" class="settings-range-input" min="0.8" max="4" step="0.05" value="1.7">
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-range">
+      <label class="settings-range-label" for="set-scale">
+        <span>Масштаб</span>
+        <span id="set-scale-value">100%</span>
+      </label>
+      <input type="range" id="set-scale" class="settings-range-input" min="0.5" max="1.15" step="0.05" value="1">
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-range">
+      <label class="settings-range-label" for="set-search-width">
+        <span>Ширина поиска</span>
+        <span id="set-search-width-value">460px</span>
+      </label>
+      <input type="range" id="set-search-width" class="settings-range-input" min="320" max="800" step="10" value="460">
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-city">
+      <label class="settings-city-label">Город (погода)</label>
+      <input type="text" id="set-city" class="settings-city-input" placeholder="Например: Tashkent" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+
+  <div class="bottom-buttons">
+    <button id="toggle-mode" class="icon-button" title="Полёт / Небо">
+      <svg id="mode-icon-static" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+      <svg id="mode-icon-warp" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    </button>
+    <button id="toggle-focus" class="icon-button" title="Фокус">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg>
+    </button>
+    <button id="toggle-settings" class="icon-button" title="Настройки">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <script src="vendor/three.min.js"></script>
+  <script src="shared/aihub-canvas.js"></script>
+  <script src="shared/aihub-astro.js"></script>
+  <script src="shared/aihub-realsky.js"></script>
+  <script src="shared/aihub-real-constellations.js"></script>
+  <script src="shared/aihub-audio-reactive.js"></script>
+  <script src="shared/aihub-webgpu-starfield.js"></script>
+  <script src="shared/aihub-starfield-worker-source.js"></script>
+  <script src="shared/aihub-worker-starfield.js"></script>
+  <script src="cosmic-depth.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>
