@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+test-results/
 *.log
 *.tmp
 .DS_Store

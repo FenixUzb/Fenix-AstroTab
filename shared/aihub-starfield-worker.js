@@ -170,7 +170,7 @@ function drawBackground(ctx, now) {
 }
 
 function drawBlackHole(ctx, now) {
-  if (state.settings.blackHole !== true) return;
+  if (state.settings.blackHole !== true || state.settings.blackHoleSimulationActive === true) return;
   const cx = state.width * (0.68 + Math.sin(now * 0.00012) * 0.05);
   const cy = state.height * (0.36 + Math.cos(now * 0.0001) * 0.04);
   const base = Math.min(state.width, state.height) * 0.045;
@@ -392,25 +392,28 @@ function drawWarp(ctx, dt, now) {
   const cx = state.width / 2;
   const cy = state.height / 2;
   const maxR = Math.hypot(cx, cy);
+  const foreground = settings.flightForeground !== false;
+  const maxRadius = foreground ? 1.08 : 0.52;
   const speed = (state.reducedMotion ? 0.08 : 0.56) * normalizeFlightSpeed(settings.flightSpeed) * (1 + audio.bass * 0.65 + audio.beat * 0.35);
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   for (const star of state.warpStars) {
     star.radius += star.speed * speed * dt;
-    if (star.radius > 1.08) Object.assign(star, makeWarpStar(false));
+    if (star.radius > maxRadius) Object.assign(star, makeWarpStar(false));
     const r = star.radius * maxR;
-    const tail = Math.max(8 * state.dpr, r * (0.028 + audio.high * 0.015));
+    const tailCap = foreground ? 54 * state.dpr : 24 * state.dpr;
+    const tail = Math.min(tailCap, Math.max(8 * state.dpr, r * (0.028 + audio.high * 0.015)));
     const x = cx + Math.cos(star.angle) * r;
     const y = cy + Math.sin(star.angle) * r;
     const px = cx + Math.cos(star.angle) * Math.max(0, r - tail);
     const py = cy + Math.sin(star.angle) * Math.max(0, r - tail);
-    const alpha = Math.min(1, 0.08 + star.radius * 0.75);
+    const alpha = Math.min(foreground ? 1 : 0.35, 0.08 + star.radius * 0.75);
     const grad = ctx.createLinearGradient(px, py, x, y);
     grad.addColorStop(0, rgba(120, 175, 255, 0));
     grad.addColorStop(0.8, rgba(190, 225, 255, alpha * 0.65));
     grad.addColorStop(1, rgba(255, 255, 255, alpha));
     ctx.strokeStyle = grad;
-    ctx.lineWidth = star.size * (0.65 + star.radius * 1.6);
+    ctx.lineWidth = star.size * (foreground ? 0.65 + star.radius * 1.6 : 0.42 + star.radius * 0.75);
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(x, y);

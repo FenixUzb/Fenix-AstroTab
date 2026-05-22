@@ -6,6 +6,9 @@ const STAR_FLIGHT_SPEED_MAX = 15;
 const STAR_FLIGHT_STAR_COUNT_DEFAULT = 520;
 const STAR_FLIGHT_STAR_COUNT_MIN = 100;
 const STAR_FLIGHT_STAR_COUNT_MAX = 2000;
+const WARP_SKY_STAR_COUNT_RATIO = 1.8;
+const WARP_SKY_STAR_COUNT_MIN = 180;
+const WARP_SKY_STAR_COUNT_MAX = 3600;
 
 function normalizeFlightSpeed(value) {
   const n = Number(value);
@@ -21,6 +24,11 @@ function normalizeFlightStarCount(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return STAR_FLIGHT_STAR_COUNT_DEFAULT;
   return Math.min(STAR_FLIGHT_STAR_COUNT_MAX, Math.max(STAR_FLIGHT_STAR_COUNT_MIN, Math.round(n)));
+}
+
+function normalizeWarpSkyStarCount(value) {
+  const base = normalizeFlightStarCount(value);
+  return Math.min(WARP_SKY_STAR_COUNT_MAX, Math.max(WARP_SKY_STAR_COUNT_MIN, Math.round(base * WARP_SKY_STAR_COUNT_RATIO)));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -49,8 +57,8 @@ document.addEventListener("DOMContentLoaded", () => {
     shootingSpeed: 1.0,
     flightSpeed: STAR_FLIGHT_SPEED_DEFAULT,
     flightStarCount: STAR_FLIGHT_STAR_COUNT_DEFAULT,
+    flightForeground: true,
     nebula: true,
-    vignette: true,
     warp: false,
     cosmicDepth: true,
     threeStars: true,
@@ -58,7 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
     bloom: true,
     planet: true,
     cursorLens: true,
-    blackHole: false,
     realSky: false,
     realSkyLat: null,
     realSkyLon: null,
@@ -255,7 +262,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Apply initial settings
   if (!settings.nebula) body.classList.add("no-nebula");
-  if (!settings.vignette) body.classList.add("no-vignette");
   if (!settings.acrylic) body.classList.add("no-acrylic");
   if (settings.warp) body.classList.add("warp-mode");
   body.classList.toggle("hdr-on", settings.hdr !== false);
@@ -863,19 +869,18 @@ document.addEventListener("DOMContentLoaded", () => {
     "set-dust": "dust",
     "set-shooting": "shooting",
     "set-nebula": "nebula",
+    "set-flight-foreground": "flightForeground",
     "set-cosmic-depth": "cosmicDepth",
     "set-hdr": "hdr",
     "set-bloom": "bloom",
     "set-planet": "planet",
     "set-cursor-lens": "cursorLens",
-    "set-blackhole": "blackHole",
     "set-realsky": "realSky",
     "set-webgpu-stars": "webgpuStars",
     "set-worker-starfield": "workerStarfield",
     "set-audio-reactive": "audioReactive",
     "set-acrylic": "acrylic",
     "set-refraction": "refraction",
-    "set-vignette": "vignette",
     "set-warp": "warp"
   };
 
@@ -1268,6 +1273,7 @@ document.addEventListener("DOMContentLoaded", () => {
     flightSpeedInput.addEventListener("input", () => {
       settings.flightSpeed = normalizeFlightSpeed(flightSpeedInput.value);
       if (warpInstance) warpInstance.setFlightSpeed(settings.flightSpeed);
+      if (warpSkyInstance) warpSkyInstance.setFlightSpeed(settings.flightSpeed);
       if (workerStarfieldLayer) workerStarfieldLayer.updateSettings(settings);
       syncFlightSpeedControl(settings.flightSpeed);
       saveSettings(settings);
@@ -1287,6 +1293,7 @@ document.addEventListener("DOMContentLoaded", () => {
     flightStarCountInput.addEventListener("input", () => {
       settings.flightStarCount = normalizeFlightStarCount(flightStarCountInput.value);
       if (warpInstance) warpInstance.setStarCount(settings.flightStarCount);
+      if (warpSkyInstance) warpSkyInstance.setFlightStarCount(settings.flightStarCount);
       if (workerStarfieldLayer) workerStarfieldLayer.updateSettings(settings);
       syncFlightStarCountControl(settings.flightStarCount);
       saveSettings(settings);
@@ -1309,8 +1316,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (key === "constellations") {
       if (starfieldInstance) starfieldInstance.constellationsEnabled = value;
       if (warpSkyInstance) warpSkyInstance.constellationsEnabled = value;
-    } else if (key === "vignette") {
-      body.classList.toggle("no-vignette", !value);
     } else if (key === "hdr") {
       body.classList.toggle("hdr-on", value !== false);
       if (starfieldInstance && starfieldInstance.updateHdr) starfieldInstance.updateHdr(value);
@@ -1322,15 +1327,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (webgpuStarfieldLayer) webgpuStarfieldLayer.setHDR(value);
       if (workerStarfieldLayer) workerStarfieldLayer.updateHdr(value);
       updateHdrDebug();
+    } else if (key === "flightForeground") {
+      if (warpInstance && warpInstance.setFlightForeground) warpInstance.setFlightForeground(value);
+      if (warpSkyInstance && warpSkyInstance.setFlightForeground) warpSkyInstance.setFlightForeground(value);
     } else if (key === "cosmicDepth" || key === "bloom" || key === "planet" || key === "cursorLens") {
       if (key === "bloom") aiHubSetCanvasBloomEnabled(value !== false);
       if (cosmicDepthLayer) cosmicDepthLayer.updateSettings(settings);
       if (threeStarfieldLayer) threeStarfieldLayer.updateSettings(settings);
       updateHdrDebug();
-    } else if (key === "blackHole") {
-      if (starfieldInstance && starfieldInstance.settings) starfieldInstance.settings.blackHole = value;
-      if (warpInstance) warpInstance.blackHoleEnabled = value;
-      if (cosmicDepthLayer) cosmicDepthLayer.updateSettings(settings);
     } else if (key === "realSky") {
       body.classList.toggle("real-sky-on", value === true);
       if (realStarfieldLayer) realStarfieldLayer.setEnabled(value === true);
@@ -1418,7 +1422,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ...settings,
       warpSkyOverlay: true,
       shooting: false,
-      blackHole: false,
       threeStars: false,
       cosmicDepth: false
     };
@@ -1478,7 +1481,7 @@ document.addEventListener("DOMContentLoaded", () => {
     stopPrimaryCanvasRenderer();
     setWorkerStarfieldActive(false);
     if (settings.warp) {
-      warpInstance = new WarpField(bgCanvas, { instant: true, blackHole: settings.blackHole, hdr: settings.hdr, starGlow: settings.starGlow, flightSpeed: settings.flightSpeed, flightStarCount: settings.flightStarCount });
+      warpInstance = new WarpField(bgCanvas, { instant: true, hdr: settings.hdr, starGlow: settings.starGlow, flightSpeed: settings.flightSpeed, flightStarCount: settings.flightStarCount, flightForeground: settings.flightForeground });
       ensureWarpSkyOverlay();
     } else {
       stopWarpSkyOverlay();
@@ -1571,7 +1574,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (enabled) {
       if (starfieldInstance) { starfieldInstance.stop(); starfieldInstance = null; }
-      if (!warpInstance && canvas) warpInstance = new WarpField(canvas, { instant: false, blackHole: settings.blackHole, hdr: settings.hdr, starGlow: settings.starGlow, flightSpeed: settings.flightSpeed, flightStarCount: settings.flightStarCount });
+      if (!warpInstance && canvas) warpInstance = new WarpField(canvas, { instant: false, hdr: settings.hdr, starGlow: settings.starGlow, flightSpeed: settings.flightSpeed, flightStarCount: settings.flightStarCount, flightForeground: settings.flightForeground });
       ensureWarpSkyOverlay();
     } else {
       if (warpInstance) { warpInstance.stop(); warpInstance = null; }
@@ -2814,7 +2817,7 @@ class WarpField {
     this.time = 0;
     this.entryProgress = options.instant ? 1 : 0;
     this.nextClosePass = 300 + Math.random() * 600;
-    this.blackHoleEnabled = options.blackHole === true;
+    this.flightForegroundEnabled = options.flightForeground !== false;
 
     this.starColors = [
       { r: 255, g: 255, b: 255 },
@@ -2846,16 +2849,6 @@ class WarpField {
     this.canvas.height = this.height;
     this.cx = this.width / 2;
     this.cy = this.height / 2;
-    const minDim = Math.min(this.width, this.height);
-    this.lensCenterX = this.width * 0.65;
-    this.lensCenterY = this.height * 0.4;
-    this.lensOrbitRX = this.width * 0.18;
-    this.lensOrbitRY = this.height * 0.22;
-    this.lensX = this.lensCenterX;
-    this.lensY = this.lensCenterY;
-    this.eventR = Math.max(18, minDim * 0.025);
-    this.einsteinR = this.eventR * 2.6;
-    this.lensStrength = minDim * 1.5;
   }
 
   _initStars() {
@@ -2903,6 +2896,10 @@ class WarpField {
     }
   }
 
+  setFlightForeground(enabled) {
+    this.flightForegroundEnabled = enabled !== false;
+  }
+
   stop() {
     this.stopped = true;
     window.removeEventListener("resize", this._onResize);
@@ -2934,7 +2931,7 @@ class WarpField {
     const dz = spd * 5.2;
 
     this.nextClosePass--;
-    if (this.nextClosePass <= 0) {
+    if (this.flightForegroundEnabled && this.nextClosePass <= 0) {
       this.nextClosePass = 600 + Math.random() * 600;
       const color = this.starColors[Math.floor(Math.random() * this.starColors.length)];
       const spread = Math.max(w, h) * 0.8;
@@ -2946,13 +2943,15 @@ class WarpField {
         color: aiHubCanvasColor(color.r, color.g, color.b, 1, this.hdrEnabled),
         brightness: 1.0
       });
+    } else if (!this.flightForegroundEnabled && this.nextClosePass <= 0) {
+      this.nextClosePass = 600 + Math.random() * 600;
     }
 
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, w, h);
     ctx.lineCap = "round";
 
-    const blackHoleOn = this.blackHoleEnabled;
+    const blackHoleOn = this.blackHoleEnabled && this.blackHoleSimulationActive !== true;
     if (blackHoleOn) {
       const t = this.time * (Math.PI * 2 / 7200);
       this.lensX = this.lensCenterX + Math.cos(t) * this.lensOrbitRX;
@@ -2967,7 +2966,7 @@ class WarpField {
       const prevZ = star.z;
       star.z -= dz;
 
-      if (star.z <= 1) {
+      if (star.z <= (this.flightForegroundEnabled ? 1 : maxD * 0.48)) {
         Object.assign(star, this._makeStar(false));
         continue;
       }
@@ -3007,8 +3006,12 @@ class WarpField {
       const lift = Math.max(0, glow - 1);
       const brightRank = Math.min(1, Math.pow(Math.max(0, depthRatio), 2.2) * (0.65 + star.brightness * 0.55));
       const boost = 1 + lift * brightRank * 1.6 + audioHigh * brightRank * 0.42 + audioBeat * brightRank * 0.35;
-      const alpha = Math.max(0, Math.min(1, depthRatio * 1.35 * boost)) * star.brightness;
-      const size = Math.max(0.15, depthRatio * 1.8) * (1 + audioBass * brightRank * 0.18);
+      let alpha = Math.max(0, Math.min(1, depthRatio * 1.35 * boost)) * star.brightness;
+      let size = Math.max(0.15, depthRatio * 1.8) * (1 + audioBass * brightRank * 0.18);
+      if (!this.flightForegroundEnabled) {
+        alpha = Math.min(0.42, alpha * 0.62);
+        size *= 0.72;
+      }
 
       if (alpha < 0.01) continue;
 
@@ -3021,8 +3024,15 @@ class WarpField {
       // for distant stars, so they still render as points.
       if (streakLen > 0.4) {
         const tailScale = 2.6 + spd * 2.8;
-        const tailX = sx - dx * tailScale;
-        const tailY = sy - dy * tailScale;
+        const rawTailX = dx * tailScale;
+        const rawTailY = dy * tailScale;
+        const rawTailLen = Math.sqrt(rawTailX * rawTailX + rawTailY * rawTailY);
+        const maxTail = this.flightForegroundEnabled
+          ? 10 + brightRank * 48 + Math.min(24, spd * 4)
+          : 5 + brightRank * 22 + Math.min(10, spd * 2);
+        const tailClamp = Math.min(1, maxTail / Math.max(0.001, rawTailLen));
+        const tailX = sx - rawTailX * tailClamp;
+        const tailY = sy - rawTailY * tailClamp;
         const grad = ctx.createLinearGradient(tailX, tailY, sx, sy);
         grad.addColorStop(0, aiHubCanvasColor(star.r, star.g, star.b, 0, this.hdrEnabled));
         grad.addColorStop(1, aiHubCanvasColor(star.r, star.g, star.b, Math.min(1, alpha * (0.58 + brightRank * 0.22)), this.hdrEnabled));
@@ -3076,7 +3086,8 @@ class Starfield {
     this.reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.shootingEnabled = settings.shooting;
     this.constellationsEnabled = settings.constellations;
-    this.starCount = 5600;
+    this.flightSpeed = normalizeFlightSpeed(this.settings.flightSpeed);
+    this.starCount = this._resolveStarCount();
     this.colors = aiHubStarPalette(this.hdrEnabled);
     this.constellations = [];
     this.nextConstellTime = Date.now() + 5000;
@@ -3109,6 +3120,35 @@ class Starfield {
     for (const star of this.stars) {
       star.color = this.colors[Math.floor(Math.random() * this.colors.length)];
     }
+  }
+
+  setFlightSpeed(value) {
+    this.settings.flightSpeed = normalizeFlightSpeed(value);
+    this.flightSpeed = this.settings.flightSpeed;
+  }
+
+  setFlightStarCount(value) {
+    this.settings.flightStarCount = normalizeFlightStarCount(value);
+    if (this.settings.warpSkyOverlay !== true) return;
+    const nextCount = this._resolveStarCount();
+    if (nextCount === this.starCount) return;
+    this.starCount = nextCount;
+    this._createStars();
+    this.fallenCount = 0;
+  }
+
+  setFlightForeground(enabled) {
+    this.settings.flightForeground = enabled !== false;
+    if (this.settings.warpSkyOverlay !== true) return;
+    this._createStars();
+    this.fallenCount = 0;
+  }
+
+  _resolveStarCount() {
+    if (this.settings.warpSkyOverlay === true) {
+      return normalizeWarpSkyStarCount(this.settings.flightStarCount);
+    }
+    return 5600;
   }
 
   _shootInterval(lastType) {
@@ -3223,11 +3263,13 @@ class Starfield {
     this.stars = [];
     const n = this.starCount;
     if (this.settings.warpSkyOverlay === true) {
-      this._generateLayer(Math.floor(n * 0.50), 0.07, 0.18, 0.16, false);
-      this._generateLayer(Math.floor(n * 0.29), 0.14, 0.34, 0.27, true);
-      this._generateLayer(Math.floor(n * 0.14), 0.30, 0.58, 0.41, true);
-      this._generateLayer(Math.floor(n * 0.055), 0.54, 0.88, 0.56, false);
-      this._generateLayer(Math.floor(n * 0.015), 0.84, 1.08, 0.72, false);
+      this._generateLayer(Math.floor(n * 0.44), 0.07, 0.18, 0.13, false);
+      this._generateLayer(Math.floor(n * 0.31), 0.14, 0.34, 0.24, true, { speedScale: 0.62, trail: 0.22 });
+      this._generateLayer(Math.floor(n * 0.17), 0.30, 0.58, 0.38, true, { speedScale: 0.92, trail: 0.34 });
+      if (this.settings.flightForeground !== false) {
+        this._generateLayer(Math.floor(n * 0.065), 0.54, 0.88, 0.52, false, { speedScale: 1.2, trail: 0.42 });
+        this._generateLayer(Math.floor(n * 0.015), 0.84, 1.08, 0.68, false, { speedScale: 1.45, trail: 0.52 });
+      }
       return;
     }
     this._generateLayer(Math.floor(n * 0.50), 0.08, 0.20, 0.22, false);
@@ -3237,7 +3279,7 @@ class Starfield {
     this._generateLayer(Math.floor(n * 0.01), 0.90, 1.18, 0.84, false);
   }
 
-  _generateLayer(count, minSize, maxSize, alpha, cluster) {
+  _generateLayer(count, minSize, maxSize, alpha, cluster, warpMotion) {
     const clusters = [];
     for (let i = 0; i < 5; i++) {
       clusters.push({ x: Math.random() * this.width, y: Math.random() * this.height });
@@ -3255,17 +3297,74 @@ class Starfield {
         x = Math.random() * this.width;
         y = Math.random() * this.height;
       }
-      this.stars.push(new Star(x, y, minSize, maxSize, alpha, this.colors));
+      const star = new Star(x, y, minSize, maxSize, alpha, this.colors);
+      if (warpMotion && this.settings.warpSkyOverlay === true) {
+        this._seedWarpSkyFlight(star, true, warpMotion.speedScale, warpMotion.trail);
+      }
+      this.stars.push(star);
+    }
+  }
+
+  _seedWarpSkyFlight(star, randomZ = true, speedScale = 1, trail = 0.25) {
+    const fl = Math.max(360, Math.min(this.width, this.height) * 0.52);
+    const maxZ = 1450 + Math.random() * 340;
+    const minZ = 280;
+    const z = randomZ ? minZ + Math.random() * (maxZ - minZ) : maxZ + Math.random() * 280;
+    const k = fl / z;
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    star.warpFly = true;
+    star.warpFocalLength = fl;
+    star.warpMaxZ = maxZ;
+    star.warpZ = z;
+    star.warpWorldX = (star.x - cx) / k;
+    star.warpWorldY = (star.y - cy) / k;
+    star.warpSpeedBase = Math.max(0.2, speedScale);
+    star.warpSpeedScale = star.warpSpeedBase * (0.75 + Math.random() * 0.5);
+    star.warpTrail = Math.max(0.12, trail);
+    star.warpBaseSize = star.size;
+    star.prevX = star.x;
+    star.prevY = star.y;
+    star.warpDepth = 1 - Math.min(1, z / maxZ);
+  }
+
+  _resetWarpSkyFlight(star) {
+    star.x = Math.random() * this.width;
+    star.y = Math.random() * this.height;
+    star.size = star.warpBaseSize || star.size;
+    this._seedWarpSkyFlight(star, false, star.warpSpeedBase || 1, star.warpTrail || 0.25);
+  }
+
+  _advanceWarpSkyFlight(star, speed) {
+    if (!star.warpFly || !Number.isFinite(star.warpZ)) return;
+    star.prevX = star.x;
+    star.prevY = star.y;
+    star.warpZ -= speed * star.warpSpeedScale;
+    const depth = 1 - Math.min(1, Math.max(0, star.warpZ / star.warpMaxZ));
+    const k = star.warpFocalLength / Math.max(1, star.warpZ);
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    star.x = cx + star.warpWorldX * k;
+    star.y = cy + star.warpWorldY * k;
+    star.warpDepth = depth;
+    const foreground = this.settings.flightForeground !== false;
+    star.size = (star.warpBaseSize || star.size) * (1 + depth * (foreground ? 1.25 : 0.68));
+    const minZ = foreground ? 180 : star.warpMaxZ * 0.48;
+    if (star.warpZ <= minZ || star.x < -90 || star.x > this.width + 90 || star.y < -90 || star.y > this.height + 90) {
+      this._resetWarpSkyFlight(star);
     }
   }
 
   _createWarpSkyStar(x, y) {
-    const r = Math.random();
-    if (r < 0.50) return new Star(x, y, 0.07, 0.18, 0.16, this.colors);
-    if (r < 0.79) return new Star(x, y, 0.14, 0.34, 0.27, this.colors);
-    if (r < 0.93) return new Star(x, y, 0.30, 0.58, 0.41, this.colors);
-    if (r < 0.985) return new Star(x, y, 0.54, 0.88, 0.56, this.colors);
-    return new Star(x, y, 0.84, 1.08, 0.72, this.colors);
+    const r = this.settings.flightForeground === false ? Math.random() * 0.93 : Math.random();
+    let star;
+    if (r < 0.50) star = new Star(x, y, 0.07, 0.18, 0.16, this.colors);
+    else if (r < 0.79) star = new Star(x, y, 0.14, 0.34, 0.27, this.colors);
+    else if (r < 0.93) star = new Star(x, y, 0.30, 0.58, 0.41, this.colors);
+    else if (r < 0.985) star = new Star(x, y, 0.54, 0.88, 0.56, this.colors);
+    else star = new Star(x, y, 0.84, 1.08, 0.72, this.colors);
+    if (r >= 0.50) this._seedWarpSkyFlight(star, true, r < 0.93 ? 0.82 : 1.25, r < 0.93 ? 0.28 : 0.44);
+    return star;
   }
 
   _animate() {
@@ -3276,12 +3375,18 @@ class Starfield {
     if (!overlay) this._drawDeepSpace(ctx);
     const now = Date.now();
 
-    // Slow parallax drift — larger stars drift faster (depth illusion)
+    // Slow parallax drift; in warp overlay, mid/near stars use a light perspective flight.
     this.driftAngle += this.driftSpeed;
     const baseDX = Math.cos(this.driftAngle) * 0.015;
     const baseDY = Math.sin(this.driftAngle) * 0.01;
+    const warpSkyFlight = overlay && this.settings.warp === true && !this.reducedMotion;
+    const warpSkySpeed = (this.reducedMotion ? 0.05 : 0.18) * normalizeFlightSpeed(this.flightSpeed) * 1.35;
     for (const star of this.stars) {
       if (star.fadeIn > 0) continue; // don't drift stars still fading in
+      if (warpSkyFlight && star.warpFly) {
+        this._advanceWarpSkyFlight(star, warpSkySpeed);
+        continue;
+      }
       const depthFactor = 0.3 + star.size * 0.7;
       star.x += baseDX * depthFactor;
       star.y += baseDY * depthFactor;
@@ -3351,7 +3456,7 @@ class Starfield {
 
     // Stars with cursor repulsion — batched rendering to minimize save/restore
     // Black hole drift (slow elliptical orbit)
-    const blackHoleOn = !overlay && this.settings.blackHole === true;
+    const blackHoleOn = !overlay && this.settings.blackHole === true && this.settings.blackHoleSimulationActive !== true;
     if (blackHoleOn) {
       const t = (now / 1000) * (Math.PI * 2 / 120); // ~120s period
       this.lensX = this.lensCenterX + Math.cos(t) * this.lensOrbitRX;
@@ -3402,6 +3507,29 @@ class Starfield {
       const alphaBoost = (overlay ? overlayDepth : aiHubGlowBoost(starGlow, rank, 0.18)) * audioLift;
       const radius = (overlay ? Math.min(1.7, Math.max(0.1, star.size * (0.95 + rank * 0.5))) : star.size) * (1 + audioBass * rank * 0.18 + audioBeat * rank * 0.12);
       ctx.fillStyle = star.color;
+      if (overlay && star.warpFly && Number.isFinite(star.prevX) && Number.isFinite(star.prevY)) {
+        const vx = sx - star.prevX;
+        const vy = sy - star.prevY;
+        const trailLen = Math.sqrt(vx * vx + vy * vy);
+        if (trailLen > 0.35) {
+          const foreground = this.settings.flightForeground !== false;
+          const maxTrail = foreground ? 8 + (star.warpDepth || 0) * 30 : 5 + (star.warpDepth || 0) * 12;
+          const trailScale = Math.min(1, maxTrail / trailLen);
+          const tailX = sx - vx * trailScale;
+          const tailY = sy - vy * trailScale;
+          const trailAlpha = Math.min(foreground ? 0.18 : 0.09, star.alpha * (star.warpTrail || 0.25) * (0.32 + (star.warpDepth || 0) * 0.28));
+          const grad = ctx.createLinearGradient(tailX, tailY, sx, sy);
+          grad.addColorStop(0, aiHubCanvasColor(120, 175, 255, 0, this.hdrEnabled));
+          grad.addColorStop(1, aiHubCanvasColor(210, 235, 255, trailAlpha, this.hdrEnabled));
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = Math.max(0.25, radius * 0.55);
+          ctx.beginPath();
+          ctx.moveTo(tailX, tailY);
+          ctx.lineTo(sx, sy);
+          ctx.stroke();
+        }
+      }
       ctx.globalAlpha = Math.min(1, star.alpha * alphaBoost);
       ctx.beginPath();
       ctx.arc(sx, sy, radius, 0, TAU);

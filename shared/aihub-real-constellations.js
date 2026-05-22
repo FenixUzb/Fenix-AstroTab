@@ -7,7 +7,7 @@
   const TAU = Math.PI * 2;
   const DEFAULT_LAT = 41.31;
   const DEFAULT_LON = 69.24;
-  const CONSTELLATION_ALPHA_SCALE = 0.125;
+  const CONSTELLATION_ALPHA_SCALE = 0.0416667;
   const CONSTELLATION_SEQUENCE_STEP = 5;
 
   function star(raHours, decDeg) {

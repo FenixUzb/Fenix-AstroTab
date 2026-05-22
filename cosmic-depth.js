@@ -356,9 +356,6 @@
           uNebula: { value: 1 },
           uPlanet: { value: 1 },
           uLens: { value: 1 },
-          uBlackHole: { value: 0 },
-          uBlackHolePos: { value: new THREE.Vector2(0.65, 0.6) },
-          uBlackHoleSpin: { value: 0 },
           uBloom: { value: 1 },
           uGlow: { value: 1.7 },
           uWarp: { value: 0 },
@@ -385,9 +382,6 @@
           uniform float uNebula;
           uniform float uPlanet;
           uniform float uLens;
-          uniform float uBlackHole;
-          uniform vec2 uBlackHolePos;
-          uniform float uBlackHoleSpin;
           uniform float uBloom;
           uniform float uGlow;
           uniform float uWarp;
@@ -486,26 +480,6 @@
             color += vec3(0.18, 0.42, 0.58) * lensRing;
             alpha += lensCore * 0.025 + lensRing;
 
-            vec2 bh = (uv - uBlackHolePos) * vec2(aspect, 1.0);
-            float bhDist = length(bh);
-            float bhOn = uBlackHole * (1.0 - uWarp * 0.12);
-            float bhShadow = smoothstep(0.13, 0.028, bhDist) * bhOn;
-            float bhHorizon = (1.0 - smoothstep(0.021, 0.031, bhDist)) * bhOn;
-            float bhPhoton = (1.0 - smoothstep(0.004, 0.018, abs(bhDist - 0.066))) * bhOn;
-            float angle = -0.22 + sin(uBlackHoleSpin * 0.31) * 0.025;
-            mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
-            vec2 diskP = rot * bh;
-            float diskCore = exp(-pow(diskP.y / 0.019, 2.0));
-            float diskSpan = smoothstep(0.18, 0.048, abs(diskP.x)) * smoothstep(0.024, 0.058, abs(diskP.x));
-            float disk = diskCore * diskSpan * bhOn;
-            vec3 diskColor = mix(vec3(0.22, 0.43, 0.95), vec3(1.0, 0.56, 0.22), smoothstep(-0.08, 0.12, diskP.x + sin(uBlackHoleSpin) * 0.025));
-            color += vec3(0.08, 0.15, 0.34) * bhShadow * 0.09;
-            color += diskColor * disk * 0.13;
-            color += vec3(0.88, 0.94, 1.0) * bhPhoton * 0.20;
-            alpha += bhShadow * 0.024 + disk * 0.052 + bhPhoton * 0.052;
-            color = mix(color, vec3(0.0), bhHorizon);
-            alpha = max(alpha, bhHorizon * 0.11);
-
             color *= 1.0 - depth * 0.35;
             alpha = clamp(alpha, 0.0, 0.14);
             gl_FragColor = vec4(color, alpha);
@@ -543,12 +517,6 @@
       this.material.uniforms.uNebula.value = this.settings.nebula === false ? 0.22 : 1;
       this.material.uniforms.uPlanet.value = this.settings.planet === false ? 0 : 1;
       this.material.uniforms.uLens.value = this.settings.cursorLens === false ? 0 : 1;
-      this.material.uniforms.uBlackHole.value = this.settings.blackHole === true ? 1 : 0;
-      const phase = (Date.now() / 1000) * (Math.PI * 2 / 120);
-      const x = 0.65 + Math.cos(phase) * 0.18;
-      const topY = 0.4 + Math.sin(phase * 0.83) * 0.22;
-      this.material.uniforms.uBlackHolePos.value.set(x, 1 - topY);
-      this.material.uniforms.uBlackHoleSpin.value = phase;
       this.material.uniforms.uBloom.value = this.settings.bloom === false ? 0 : 1;
       this.material.uniforms.uGlow.value = Math.min(4, Math.max(0.8, Number(this.settings.starGlow) || 1.7));
       this.material.uniforms.uWarp.value = warp ? 1 : 0;
