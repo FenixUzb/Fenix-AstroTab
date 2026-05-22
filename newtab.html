@@ -51,6 +51,7 @@
   <canvas id="real-sky-canvas"></canvas>
   <canvas id="webgpu-stars-canvas"></canvas>
   <canvas id="bloom-canvas"></canvas>
+  <canvas id="rain-glass-canvas"></canvas>
   <div id="bg-dim"></div>
   <div id="aurora"></div>
   <div id="spotlight"></div>
@@ -173,7 +174,7 @@
 
             <div class="icon-glow"></div>
             <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M15.7 2.5H8.3c-.5 0-1 .27-1.3.75L3.25 10c-.27.46-.27 1.04 0 1.5L7 18.25c.27.46.77.75 1.3.75h7.4c.5 0 1-.27 1.3-.75l3.75-6.75c.27-.46.27-1.04 0-1.5L17 3.25c-.27-.46-.77-.75-1.3-.75zM12 15a3 3 0 110-6 3 3 0 010 6z"/>
+              <path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/>
             </svg>
             <span class="btn-name">Claude</span>
             <span class="btn-url">claude.ai</span>
@@ -345,6 +346,7 @@
       </div>
       <label class="settings-toggle"><input type="checkbox" id="set-acrylic" checked><span>Акрил</span></label>
       <label class="settings-toggle"><input type="checkbox" id="set-refraction" checked><span>Преломление</span></label>
+      <label class="settings-toggle"><input type="checkbox" id="set-rain"><span>Дождь на стекле</span></label>
     </details>
     <details class="settings-advanced settings-tools">
       <summary>Нейросети на экране</summary>

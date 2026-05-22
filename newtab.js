@@ -75,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
     audioSource: "mic",
     acrylic: true,
     refraction: true,
+    rain: false,
     scale: 1,
     clockOffsetY: 0,
     clockBloom: 1,
@@ -264,6 +265,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!settings.nebula) body.classList.add("no-nebula");
   if (!settings.acrylic) body.classList.add("no-acrylic");
   if (settings.warp) body.classList.add("warp-mode");
+  if (settings.rain) body.classList.add("rain-enabled");
   body.classList.toggle("hdr-on", settings.hdr !== false);
   aiHubSetCanvasBloomEnabled(settings.bloom !== false);
   const auroraEl = document.getElementById("aurora");
@@ -881,7 +883,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "set-audio-reactive": "audioReactive",
     "set-acrylic": "acrylic",
     "set-refraction": "refraction",
-    "set-warp": "warp"
+    "set-warp": "warp",
+    "set-rain": "rain"
   };
 
   for (const [id, key] of Object.entries(checkboxMap)) {
@@ -1362,6 +1365,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (glassRefractionLayer) glassRefractionLayer.updateSettings(settings);
     } else if (key === "refraction") {
       if (glassRefractionLayer) glassRefractionLayer.updateSettings(settings);
+    } else if (key === "rain") {
+      setRainEnabled(value === true);
     } else if (key === "warp") {
       if (cosmicDepthLayer) cosmicDepthLayer.updateSettings(settings);
       if (threeStarfieldLayer) threeStarfieldLayer.updateSettings(settings);
@@ -2360,6 +2365,24 @@ document.addEventListener("DOMContentLoaded", () => {
   // ===== Floating Dust =====
   const dustInstance = new FloatingDust(settings.dust, settings.hdr);
 
+  let rainEffectInstance = null;
+  function setRainEnabled(enabled) {
+    const rCanvas = document.getElementById("rain-glass-canvas");
+    if (!rCanvas) return;
+    if (enabled) {
+      body.classList.add("rain-enabled");
+      if (!rainEffectInstance) {
+        rainEffectInstance = new RainEffect(rCanvas);
+      }
+      rainEffectInstance.start();
+    } else {
+      body.classList.remove("rain-enabled");
+      if (rainEffectInstance) {
+        rainEffectInstance.stop();
+      }
+    }
+  }
+
   // ===== Starfield / Warp init =====
   let starfieldInstance = null;
   let threeStarfieldLayer = null;
@@ -2382,9 +2405,13 @@ document.addEventListener("DOMContentLoaded", () => {
       startPrimaryCanvasRenderer();
     }
     if (bloomCanvas) new CanvasBloomLayer(canvas, bloomCanvas, settings);
-    if (window.ThreeStaticStarfieldLayer) threeStarfieldLayer = new window.ThreeStaticStarfieldLayer(settings);
+    if (window.ThreeStaticStarfieldLayer) {
+      threeStarfieldLayer = new window.ThreeStaticStarfieldLayer(settings);
+      window.threeStarfieldLayer = threeStarfieldLayer;
+    }
     if (window.CosmicDepthLayer) cosmicDepthLayer = new window.CosmicDepthLayer(settings);
     glassRefractionLayer = new GlassRefractionLayer(canvas, settings);
+    setRainEnabled(settings.rain === true);
     const fromCache = (() => { try { return JSON.parse(localStorage.getItem("aiHubWeatherCoords")); } catch { return null; } })();
     const initLat = Number.isFinite(settings.realSkyLat) ? settings.realSkyLat
       : (fromCache && Number.isFinite(fromCache.lat)) ? fromCache.lat : undefined;
@@ -2595,30 +2622,47 @@ class GlassRefractionLayer {
         void main() {
           vec2 localPx = (vUv - 0.5) * uPanelSize;
           float sdf = roundedBox(localPx, uPanelSize * 0.5, uRadius);
-          float mask = 1.0 - smoothstep(-1.0, 1.4, sdf);
+          
+          // Маска панели со сглаживанием края
+          float mask = 1.0 - smoothstep(-1.0, 1.5, sdf);
           if (mask <= 0.001) discard;
 
-          vec2 p = vUv * 2.0 - 1.0;
-          float r = clamp(length(p), 0.0, 1.0);
-          float lens = pow(1.0 - r, 1.55);
-          float rim = sin(r * 3.14159265) * 0.22;
-          float wave = sin((p.x - p.y) * 4.0 + uTime * 0.55) * 0.028;
-          vec2 bend = normalize(p + vec2(0.0001)) * (lens + rim + wave);
-          bend += vec2(-p.y, p.x) * lens * 0.14;
+          // Физическое преломление на скосах краев (bevel refraction)
+          // Сила преломления пикует на расстоянии 0-14px от края панели
+          float distToEdge = abs(sdf);
+          float edgeWeight = smoothstep(14.0, 0.0, distToEdge);
+          
+          // Направление преломления (нормаль к краю панели)
+          vec2 edgeNormal = normalize(localPx + 0.0001);
+          
+          // Волна света, бегущая по стеклу
+          float wave = sin((localPx.x - localPx.y) * 0.02 + uTime * 0.8) * 0.05;
+          
+          // Общий вектор сдвига координат
+          vec2 bend = edgeNormal * (edgeWeight * 1.85 + wave * edgeWeight);
           vec2 offset = bend * uStrength / uResolution;
 
+          // Координаты на экране
           vec2 screenUv = vec2(gl_FragCoord.x / uResolution.x, 1.0 - gl_FragCoord.y / uResolution.y);
+          
+          // Хроматическая абберация (интенсивное расщепление каналов на скосе)
           vec4 centerSample = texture2D(uTexture, screenUv + offset);
-          vec4 redSample = texture2D(uTexture, screenUv + offset * 1.55);
-          vec4 blueSample = texture2D(uTexture, screenUv - offset * 0.9);
-          vec3 refracted = vec3(redSample.r, centerSample.g, blueSample.b);
-          vec3 color = mix(centerSample.rgb * 0.72, refracted * 1.12, 0.34);
+          vec4 redSample = texture2D(uTexture, screenUv + offset * 1.95);
+          vec4 blueSample = texture2D(uTexture, screenUv - offset * 1.25);
+          
+          vec3 color = vec3(redSample.r, centerSample.g, blueSample.b);
+          
+          // Подсветка фаски (световой блик на краю стекла)
+          float edgeHighlight = smoothstep(2.5, 0.0, distToEdge) * 0.28;
+          color += vec3(edgeHighlight * 1.1, edgeHighlight * 1.2, edgeHighlight * 1.4);
+          
+          // Легкое затемнение внутри стекла для объема
+          color *= mix(1.0, 0.78, smoothstep(0.0, 30.0, distToEdge));
+
+          // Прозрачность панели
           float luma = max(max(color.r, color.g), color.b);
-          float edge = 1.0 - smoothstep(0.0, 5.5, abs(sdf));
-          float innerGlow = pow(lens, 1.4);
-          color += edge * vec3(0.11, 0.18, 0.21);
-          color += innerGlow * vec3(0.008, 0.026, 0.034);
-          float alpha = mask * (0.18 + edge * 0.26 + smoothstep(0.02, 0.42, luma) * 0.46) * uOpacity;
+          float alpha = mask * (0.16 + edgeHighlight + smoothstep(0.02, 0.42, luma) * 0.42) * uOpacity;
+          
           gl_FragColor = vec4(color, alpha);
         }
       `
@@ -2677,6 +2721,17 @@ class GlassRefractionLayer {
 
     this.time += 0.016;
     this._resizeIfNeeded();
+
+    let activeSource = this.sourceCanvas;
+    const tsl = window.threeStarfieldLayer;
+    if (tsl && tsl.enabled && tsl.settings.threeStars !== false && tsl.settings.cosmicDepth !== false) {
+      if (tsl.renderer && tsl.renderer.domElement) {
+        activeSource = tsl.renderer.domElement;
+      }
+    }
+    if (this.texture.image !== activeSource) {
+      this.texture.image = activeSource;
+    }
     this.texture.needsUpdate = true;
 
     const targets = this._getVisibleTargets();
@@ -2714,6 +2769,191 @@ class GlassRefractionLayer {
 
     this.renderer.render(this.scene, this.camera);
     this.rafId = requestAnimationFrame(this._render);
+  }
+}
+
+// ============================================================
+// RainEffect — physical rain drops on acrylic glass
+// ============================================================
+class RainEffect {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d", { alpha: true });
+    this.drops = [];
+    this.staticDrops = [];
+    this.width = 0;
+    this.height = 0;
+    this.lastTime = 0;
+    this.active = false;
+    this.rafId = null;
+
+    this._resize();
+    window.addEventListener("resize", () => this._resize());
+  }
+
+  _resize() {
+    this.width = this.canvas.width = window.innerWidth;
+    this.height = this.canvas.height = window.innerHeight;
+    if (this.active) {
+      this.ctx.fillStyle = "rgba(0, 0, 0, 0.95)";
+      this.ctx.fillRect(0, 0, this.width, this.height);
+    }
+  }
+
+  start() {
+    if (this.active) return;
+    this.active = true;
+    this.drops = [];
+    this.staticDrops = [];
+    
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.95)";
+    this.ctx.fillRect(0, 0, this.width, this.height);
+
+    const staticCount = Math.floor((this.width * this.height) / 12000);
+    for (let i = 0; i < staticCount; i++) {
+      this.staticDrops.push(this._createStaticDrop(true));
+    }
+
+    this.lastTime = performance.now();
+    this._loop = this._loop.bind(this);
+    this.rafId = requestAnimationFrame(this._loop);
+  }
+
+  stop() {
+    this.active = false;
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    this.ctx.clearRect(0, 0, this.width, this.height);
+  }
+
+  _createStaticDrop(randomY = false) {
+    return {
+      x: Math.random() * this.width,
+      y: randomY ? Math.random() * this.height : -10,
+      r: Math.random() * 2.5 + 1.2,
+      opacity: Math.random() * 0.4 + 0.3
+    };
+  }
+
+  _createRunningDrop() {
+    return {
+      x: Math.random() * this.width,
+      y: -20,
+      r: Math.random() * 2.8 + 2.5,
+      vy: Math.random() * 1.5 + 1.8,
+      vx: 0,
+      trail: [],
+      trailLength: Math.floor(Math.random() * 15 + 10),
+      lastTrailSpawn: 0
+    };
+  }
+
+  _loop(time) {
+    if (!this.active) return;
+
+    const dt = Math.min(33, time - this.lastTime);
+    this.lastTime = time;
+
+    this.ctx.globalCompositeOperation = "source-over";
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.016)";
+    this.ctx.fillRect(0, 0, this.width, this.height);
+
+    if (this.drops.length < Math.min(18, Math.floor(this.width / 90)) && Math.random() < 0.04) {
+      this.drops.push(this._createRunningDrop());
+    }
+
+    if (this.staticDrops.length < Math.floor((this.width * this.height) / 10000) && Math.random() < 0.3) {
+      this.staticDrops.push(this._createStaticDrop(false));
+    }
+
+    this.ctx.globalCompositeOperation = "destination-out";
+    this.staticDrops.forEach(drop => {
+      const grad = this.ctx.createRadialGradient(drop.x, drop.y, 0, drop.x, drop.y, drop.r);
+      grad.addColorStop(0, "rgba(255, 255, 255, 1.0)");
+      grad.addColorStop(0.7, "rgba(255, 255, 255, 0.7)");
+      grad.addColorStop(1, "rgba(255, 255, 255, 0.0)");
+      this.ctx.fillStyle = grad;
+      this.ctx.beginPath();
+      this.ctx.arc(drop.x, drop.y, drop.r, 0, Math.PI * 2);
+      this.ctx.fill();
+    });
+
+    this.drops.forEach((drop, index) => {
+      drop.vx += (Math.random() - 0.5) * 0.22;
+      drop.vx = Math.max(-0.8, Math.min(0.8, drop.vx));
+      drop.x += drop.vx;
+      drop.y += drop.vy;
+
+      if (time - drop.lastTrailSpawn > 25) {
+        drop.trail.push({ x: drop.x, y: drop.y, r: drop.r * 0.76 });
+        if (drop.trail.length > drop.trailLength) {
+          drop.trail.shift();
+        }
+        drop.lastTrailSpawn = time;
+      }
+
+      for (let i = this.staticDrops.length - 1; i >= 0; i--) {
+        const sd = this.staticDrops[i];
+        const dist = Math.hypot(drop.x - sd.x, drop.y - sd.y);
+        if (dist < drop.r + sd.r + 2.5) {
+          drop.r = Math.min(5.5, drop.r + 0.12);
+          drop.vy = Math.min(4.5, drop.vy + 0.18);
+          this.staticDrops.splice(i, 1);
+        }
+      }
+
+      this.ctx.globalCompositeOperation = "destination-out";
+      drop.trail.forEach((p, idx) => {
+        const ratio = idx / drop.trail.length;
+        const radius = p.r * (0.35 + ratio * 0.65);
+        const grad = this.ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+        grad.addColorStop(0, "rgba(255, 255, 255, 0.8)");
+        grad.addColorStop(1, "rgba(255, 255, 255, 0.0)");
+        this.ctx.fillStyle = grad;
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        this.ctx.fill();
+      });
+
+      const dropGrad = this.ctx.createRadialGradient(drop.x, drop.y, 0, drop.x, drop.y, drop.r);
+      dropGrad.addColorStop(0, "rgba(255, 255, 255, 1.0)");
+      dropGrad.addColorStop(0.8, "rgba(255, 255, 255, 0.8)");
+      dropGrad.addColorStop(1, "rgba(255, 255, 255, 0.0)");
+      this.ctx.fillStyle = dropGrad;
+      this.ctx.beginPath();
+      this.ctx.arc(drop.x, drop.y, drop.r, 0, Math.PI * 2);
+      this.ctx.fill();
+
+      if (drop.y > this.height + 20) {
+        this.drops.splice(index, 1);
+      }
+    });
+
+    this.ctx.globalCompositeOperation = "source-over";
+    
+    this.ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
+    this.staticDrops.forEach(drop => {
+      this.ctx.beginPath();
+      this.ctx.arc(drop.x - drop.r * 0.18, drop.y - drop.r * 0.18, drop.r * 0.35, 0, Math.PI * 2);
+      this.ctx.fill();
+    });
+
+    this.drops.forEach(drop => {
+      this.ctx.fillStyle = "rgba(255, 255, 255, 0.28)";
+      this.ctx.beginPath();
+      this.ctx.arc(drop.x - drop.r * 0.2, drop.y - drop.r * 0.2, drop.r * 0.38, 0, Math.PI * 2);
+      this.ctx.fill();
+      
+      this.ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
+      this.ctx.lineWidth = 0.5;
+      this.ctx.beginPath();
+      this.ctx.arc(drop.x, drop.y, drop.r - 0.5, 0, Math.PI * 2);
+      this.ctx.stroke();
+    });
+
+    this.rafId = requestAnimationFrame(this._loop);
   }
 }
 
