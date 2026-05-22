@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT New Tab",
+  "name": "Fenix AstroTab",
   "version": "1.2.0",
-  "description": "Новая вкладка с быстрым запросом в ChatGPT + контекстное меню вставки. Без prompt/Alt+N.",
+  "description": "Премиальная космическая вкладка с 3D-эффектом, преломлением стекла, погодой и лаунчером AI-ассистентов (ChatGPT, Gemini, Claude). Автор: FenixUzb.",
   "permissions": [
     "storage",
     "contextMenus",
