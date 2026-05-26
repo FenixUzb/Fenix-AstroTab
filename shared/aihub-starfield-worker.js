@@ -87,7 +87,10 @@ function resize(width, height, cssWidth, cssHeight, dpr) {
 }
 
 function buildStars() {
-  const target = state.reducedMotion ? 2400 : 4800;
+  const base = state.reducedMotion ? 2400 : 4800;
+  const cssArea = Math.max(1, state.cssWidth * state.cssHeight);
+  const areaScale = Math.min(2.4, Math.max(1, cssArea / (1920 * 1080)));
+  const target = Math.round(base * areaScale);
   if (state.stars.length === target) return;
   state.stars = [];
   for (let i = 0; i < target; i++) {
@@ -113,14 +116,19 @@ function buildStars() {
 
 function buildWarpStars() {
   const requested = normalizeFlightStarCount(state.settings.flightStarCount);
-  const target = state.reducedMotion ? Math.max(80, Math.round(requested * 0.46)) : requested;
+  const cssArea = Math.max(1, state.cssWidth * state.cssHeight);
+  const areaScale = Math.min(3.2, Math.max(1, cssArea / (1920 * 1080)));
+  const scaled = Math.round(requested * areaScale);
+  const target = state.reducedMotion ? Math.max(80, Math.round(scaled * 0.46)) : scaled;
   while (state.warpStars.length < target) state.warpStars.push(makeWarpStar(true));
   if (state.warpStars.length > target) state.warpStars.length = target;
 }
 
 function makeWarpStar(anywhere = false) {
   const angle = Math.random() * TWO_PI;
-  const radius = anywhere ? Math.random() : 0.02 + Math.random() * 0.06;
+  const radius = anywhere
+    ? Math.sqrt(Math.random())
+    : 0.015 + Math.random() * 0.12;
   return {
     angle,
     radius,
@@ -141,10 +149,16 @@ function drawBackground(ctx, now) {
     const glow = normalizeGlow(settings.starGlow);
     const bass = settings.audioReactive ? state.audio.bass : 0;
     const t = now * 0.00004;
+    const aspect = state.width / state.height;
+    const wideExcess = Math.max(0, aspect - 16 / 9);
+    const spread = Math.min(0.18, wideExcess * 0.20);
+    const leftX = 0.28 - spread;
+    const rightX = 0.72 + spread;
+    const diag = Math.hypot(state.width, state.height);
     ctx.globalCompositeOperation = "screen";
     const g1 = ctx.createRadialGradient(
-      state.width * (0.26 + Math.sin(t) * 0.03), state.height * 0.36, 0,
-      state.width * 0.28, state.height * 0.38, Math.max(state.width, state.height) * 0.56
+      state.width * (leftX - 0.02 + Math.sin(t) * 0.03), state.height * 0.36, 0,
+      state.width * leftX, state.height * 0.38, diag * 0.50
     );
     g1.addColorStop(0, rgba(96, 118, 255, (0.10 + bass * 0.05) * glow / 1.7));
     g1.addColorStop(0.45, rgba(56, 190, 210, 0.05));
@@ -153,13 +167,25 @@ function drawBackground(ctx, now) {
     ctx.fillRect(0, 0, state.width, state.height);
 
     const g2 = ctx.createRadialGradient(
-      state.width * 0.76, state.height * (0.64 + Math.cos(t * 1.4) * 0.025), 0,
-      state.width * 0.72, state.height * 0.66, Math.max(state.width, state.height) * 0.42
+      state.width * (rightX + 0.04), state.height * (0.64 + Math.cos(t * 1.4) * 0.025), 0,
+      state.width * rightX, state.height * 0.66, diag * 0.38
     );
     g2.addColorStop(0, rgba(255, 120, 184, (0.055 + bass * 0.035) * glow / 1.7));
     g2.addColorStop(1, rgba(0, 0, 0, 0));
     ctx.fillStyle = g2;
     ctx.fillRect(0, 0, state.width, state.height);
+
+    if (aspect > 2.0) {
+      const fillStrength = Math.min(1, (aspect - 2.0) / 0.6);
+      const g3 = ctx.createRadialGradient(
+        state.width * 0.50, state.height * (0.48 + Math.sin(t * 1.7) * 0.02), 0,
+        state.width * 0.50, state.height * 0.50, diag * 0.30
+      );
+      g3.addColorStop(0, rgba(130, 180, 240, (0.045 + bass * 0.02) * glow / 1.7 * fillStrength));
+      g3.addColorStop(1, rgba(0, 0, 0, 0));
+      ctx.fillStyle = g3;
+      ctx.fillRect(0, 0, state.width, state.height);
+    }
   }
 
   if (bgDim > 0) {
@@ -391,22 +417,26 @@ function drawWarp(ctx, dt, now) {
   const audio = settings.audioReactive ? state.audio : { bass: 0, high: 0, beat: 0 };
   const cx = state.width / 2;
   const cy = state.height / 2;
-  const maxR = Math.hypot(cx, cy);
   const foreground = settings.flightForeground !== false;
-  const maxRadius = foreground ? 1.08 : 0.52;
+  const maxRadius = foreground ? 1.18 : 0.62;
   const speed = (state.reducedMotion ? 0.08 : 0.56) * normalizeFlightSpeed(settings.flightSpeed) * (1 + audio.bass * 0.65 + audio.beat * 0.35);
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   for (const star of state.warpStars) {
     star.radius += star.speed * speed * dt;
     if (star.radius > maxRadius) Object.assign(star, makeWarpStar(false));
-    const r = star.radius * maxR;
+    const cosA = Math.cos(star.angle);
+    const sinA = Math.sin(star.angle);
+    const ex = cosA * star.radius * cx;
+    const ey = sinA * star.radius * cy;
+    const r = Math.hypot(ex, ey);
     const tailCap = foreground ? 54 * state.dpr : 24 * state.dpr;
     const tail = Math.min(tailCap, Math.max(8 * state.dpr, r * (0.028 + audio.high * 0.015)));
-    const x = cx + Math.cos(star.angle) * r;
-    const y = cy + Math.sin(star.angle) * r;
-    const px = cx + Math.cos(star.angle) * Math.max(0, r - tail);
-    const py = cy + Math.sin(star.angle) * Math.max(0, r - tail);
+    const trail = r > 0 ? Math.max(0, 1 - tail / r) : 0;
+    const x = cx + ex;
+    const y = cy + ey;
+    const px = cx + ex * trail;
+    const py = cy + ey * trail;
     const alpha = Math.min(foreground ? 1 : 0.35, 0.08 + star.radius * 0.75);
     const grad = ctx.createLinearGradient(px, py, x, y);
     grad.addColorStop(0, rgba(120, 175, 255, 0));
@@ -419,8 +449,9 @@ function drawWarp(ctx, dt, now) {
     ctx.lineTo(x, y);
     ctx.stroke();
   }
-  const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 0.36);
-  core.addColorStop(0, rgba(120, 185, 255, 0.20 + audio.bass * 0.10));
+  const coreR = Math.min(cx, cy) * 0.55;
+  const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+  core.addColorStop(0, rgba(120, 185, 255, 0.18 + audio.bass * 0.08));
   core.addColorStop(1, rgba(0, 0, 0, 0));
   ctx.fillStyle = core;
   ctx.fillRect(0, 0, state.width, state.height);

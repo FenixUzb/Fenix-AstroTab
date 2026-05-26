@@ -59,9 +59,15 @@
     }
 
     _createGeometry() {
-      const coreCount = this.reducedMotion ? 4200 : 9400;
-      const deepCount = this.reducedMotion ? 3000 : 7200;
-      const count = coreCount + deepCount;
+      const aspect = Math.max(1, window.innerWidth) / Math.max(1, window.innerHeight);
+      const cssArea = Math.max(1, window.innerWidth * window.innerHeight);
+      const areaScale = Math.min(3.5, Math.max(1, cssArea / (1920 * 1080)));
+      this._xRange = Math.max(6.8, 2.4 * aspect);
+      const coreCount = Math.round((this.reducedMotion ? 4200 : 9400) * areaScale);
+      const deepCount = Math.round((this.reducedMotion ? 3000 : 7200) * areaScale);
+      const edgeBase = this.reducedMotion ? 5000 : 11000;
+      const edgeCount = Math.round(edgeBase * Math.max(1, aspect / 1.78));
+      const count = coreCount + deepCount + edgeCount;
       const positions = new Float32Array(count * 3);
       const colors = new Float32Array(count * 3);
       const seeds = new Float32Array(count);
@@ -77,22 +83,41 @@
         [1.00, 0.78, 0.52]
       ];
 
+      const edgeMinX = aspect * 0.45;
+      const edgeMaxX = aspect * 1.08;
+
       for (let i = 0; i < count; i++) {
-        const deepSky = i >= coreCount;
-        const band = Math.random() < 0.38;
-        const x = (Math.random() - 0.5) * 6.8;
+        const deepSky = i >= coreCount && i < coreCount + deepCount;
+        const edgeFill = i >= coreCount + deepCount;
+        const band = !edgeFill && Math.random() < 0.38;
+        let x;
+        if (edgeFill) {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          x = side * (edgeMinX + Math.random() * (edgeMaxX - edgeMinX));
+        } else {
+          x = (Math.random() - 0.5) * this._xRange;
+        }
         const y = band && !deepSky
           ? (Math.random() - 0.5) * 0.62 + Math.sin(x * 1.8) * 0.055
           : (Math.random() - 0.5) * 2.18;
-        const depth = deepSky ? 0.74 + Math.random() * 0.26 : Math.pow(Math.random(), 0.62);
-        const bright = !deepSky && Math.random() > 0.992;
+        const depth = deepSky
+          ? 0.74 + Math.random() * 0.26
+          : edgeFill
+            ? 0.10 + Math.random() * 0.45
+            : Math.pow(Math.random(), 0.62);
+        const edgeBright = edgeFill && Math.random() > 0.988;
+        const bright = !deepSky && !edgeFill && Math.random() > 0.992;
         const size = deepSky
           ? 0.16 + Math.pow(Math.random(), 1.9) * 0.32
-          : bright
-            ? 0.90 + Math.random() * 0.46
-            : 0.22 + Math.pow(Math.random(), 2.85) * 0.82;
+          : edgeFill
+            ? edgeBright
+              ? 0.85 + Math.random() * 0.40
+              : 0.24 + Math.pow(Math.random(), 2.6) * 0.86
+            : bright
+              ? 0.90 + Math.random() * 0.46
+              : 0.22 + Math.pow(Math.random(), 2.85) * 0.82;
         const sizeRank = Math.min(1, Math.max(0, (size - 0.16) / 1.20));
-        const color = deepSky && Math.random() < 0.72
+        const color = (deepSky || edgeFill) && Math.random() < 0.72
           ? palette[Math.floor(Math.random() * 3)]
           : palette[Math.floor(Math.random() * palette.length)];
 
@@ -107,13 +132,19 @@
         depths[i] = depth;
         alphas[i] = deepSky
           ? 0.18 + sizeRank * 0.38 + Math.random() * 0.09
-          : 0.26 + sizeRank * 0.74 + Math.random() * 0.10;
+          : edgeFill
+            ? 0.32 + sizeRank * 0.72 + Math.random() * 0.10
+            : 0.26 + sizeRank * 0.74 + Math.random() * 0.10;
         twinkles[i * 2] = deepSky
           ? 0.20 + Math.random() * 0.42
-          : 0.52 + (1.0 - sizeRank) * 1.30 + Math.random() * 1.10;
+          : edgeFill
+            ? 0.40 + Math.random() * 0.80
+            : 0.52 + (1.0 - sizeRank) * 1.30 + Math.random() * 1.10;
         twinkles[i * 2 + 1] = deepSky
           ? 0.06 + Math.random() * 0.10
-          : 0.10 + sizeRank * 0.12 + Math.random() * 0.10;
+          : edgeFill
+            ? 0.08 + Math.random() * 0.11
+            : 0.10 + sizeRank * 0.12 + Math.random() * 0.10;
       }
 
       const geometry = new THREE.BufferGeometry();
